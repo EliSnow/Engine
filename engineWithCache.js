@@ -517,4 +517,144 @@ var engine;
         }
     };
     pseudo["nth-last-child"] = pseudo["nth-of-type"] = pseudo["nth-last-of-type"] = pseudo["nth-child"];
+    
+    /*
+     * Everything below is for caching and the below code is the only difference
+     * between engine.js and engineWithCache.js. The preceding code can be safely
+     * removed excluding the last line "}(document));"
+     * 
+     * The code below could easily be modified to work with most selector engines
+     */
+    (function(fn) {
+    engine = function (selector, candidates) {
+        if (candidates) {
+            return fn(selector, candidates);
+        }
+        if (cache[selector]) {
+            return cache[selector];
+        }
+        var holder = [],
+        piece = "",
+        chunk = "",
+        whole = "";
+
+        selector.replace(complex, function(m) {
+            var combo = arguments[7];
+            if(!combo) {
+                piece += m;
+                chunk += m;
+            } else if (combo == ",") {
+                candidates = cache[chunk] || (cache[chunk] = fn(piece, candidates));
+                holder = cache[whole] || (cache[whole] = holder.concat(candidates));
+                candidates = null;
+                chunk = piece = "";
+            } else {
+                candidates = cache[chunk] || (cache[chunk] = fn(piece, candidates));
+                cache[whole] || (cache[whole] = holder.concat(candidates));
+                chunk += (piece = m);
+            }
+            whole += m;
+        });
+        cache[chunk] || (cache[chunk] = fn(piece, candidates));
+        return chunk[whole] || (cache[whole] = holder.concat(cache[chunk]));
+    }
+    }(engine))
+    
+    function domChange () {
+        cache = {}; //clear the cache
+    }
+
+ //DOM Change detection
+    if (document.addEventListener) {
+    document.addEventListener("DOMNodeInserted", domChange, true);
+    document.addEventListener("DOMNodeRemoved", domChange, true);
+    } else { //IE < 9
+        /*
+         * This emulates the DOM Mutation events by intercepting the DOM
+         * manipulation methods (appendChild, removeChild, replaceChild,
+         * insertBefore, insertCell, insertRow, innerHTML, document.write,
+         * document.writeln).
+         *
+         * This method assumes DOM manipulation methods are not called until
+         * after the DOM is loaded
+         */
+        function IEInitEl (el) {
+            var l = 6,
+            intercepts = ["appendChild", "removeChild", "replaceChild", "insertBefore", "insertCell", "insertRow"];
+            while (l--) {
+                if(el[intercepts[l]]) {
+                    (function (fn) {
+                        el[intercepts[l]] = function () {
+                            domChange();
+                            try { //IE8
+                                fn.apply(this, arguments);
+                            } catch (e) { //IE 6 & 7
+                                fn(arguments[0], arguments[1]);
+                            }
+                        }
+                    }(el[intercepts[l]]));
+                }
+            }
+            if (el.style) { //IE6 & 7 getting here through the stylesheet
+                el.attachEvent("onpropertychange", function() { //TODO: detach event listener on page unload
+                    if (event.propertyName == "innerHTML") {
+                        domChange();
+                    }
+                });
+                el.style.zoom = "1";
+            } else { //IE8 getting here through prototyping
+                (function (fn) {
+                    Object.defineProperty(Element.prototype, "innerHTML", {
+                        set: function () {
+                            domChange();
+                            fn.apply(this, arguments);
+                        }
+                    });
+                }(Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML").set));
+            }
+        }
+        if (window.Element) { //IE8
+            IEInitEl(Element.prototype);
+        } else { //IE 6 & 7
+            /*
+             * A new stylesheet is created with the following CSS code:
+             *
+             *  "* { zoom: expression(IEInitEl(this))}"
+             *
+             *  This selects every element and runs the IEInitEl function in the
+             *  context of every element. Within the IEInitEl function there is
+             *  code that removes the expression from the element to ensure the
+             *  expression is only run once per element.
+             *
+             *  Naturally, if elements already has a zoom property defined in
+             *  their style, this will override it. Zoom was chosen because it
+             *  is proprietary and unlikely, in my opinion, to be used.
+             *  Consequently if an element's style is given the zoom attribute
+             *  after this code runs and before the element runs the IEInitEl
+             *  function, then the code will not work properly
+             */
+            (function (ss) {
+                ss.type = "text/css";
+                ss.styleSheet.cssText = "*{zoom:expression(IEInitEl(this))}";
+                document.getElementsByTagName("head")[0].appendChild(ss);
+            }(document.createElement('style')));
+        }
+        (function (intercepts, l) { //Intercepts document.write and document.writeln
+            while (l--) {
+                (function (fn) {
+                    document[intercepts[l]] = function () {
+                        domChange();
+                        try {
+                            fn.apply(this, arguments);
+                        } catch (e) {
+                            var i = 0;
+                            while(arguments[i]) {
+                                fn(arguments[i++]);
+                            }
+                        }
+                    }
+                }(document[intercepts[l]]));
+            }
+        }(["write", "writeln"], 2));
+    }
 }(document));
