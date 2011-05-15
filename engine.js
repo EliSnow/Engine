@@ -94,10 +94,9 @@ var engine;
                 } else if (match
                     && simpleLookup(match[1])) {
                     groups[i] = match[2];
-                } else {
-                    candidates = [document];
                 }
             }
+            !candidates && (candidates = [document]);
             groups[i].replace(complex, function (m, $1, $2, $3, $4, $5, $6, $7) {
                 var nfn;
                 /*
