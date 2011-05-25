@@ -1,5 +1,5 @@
 /*
- * Engine 1.1 beta 20110515
+ * Engine 1.1 beta 20110524
  * Written by Eli Snow
  *
  * This code is released as public domain meaning you may copy, sell, plagiarize,
@@ -9,97 +9,58 @@
  */
 var engine;
 (function (document, undefined) {
-    var pseudo,
+    var pseudo, firstElChild, lastElChild, nextElSib, prevElSib,
+    qsa = !!document.querySelectorAll,
     cache = {},
     stamper = 0,
-    stamper2 = 0,
-    complex = /(?:([#.:])?((?:[\w-]|\\[:.])+)(?:\(([^)]+)\))?)|(?:\[(?:(\w+?))(?:([~!^$*|]?=)['"]?([^\]]+)['"]?)?])| *([~>+, ]) */g;
+    stamper2 = 0;
 
     engine = function (selector, candidates) {
-        
-        function candidatesToSaved() {
-            for (n = candidates.length, j = -1; ++j < n;) {
-                if (candidates[j].$saved != savedStamp) {
-                    candidates[j].$saved = savedStamp
-                    saved[count++] = candidates[j];
-                }
-            }
-            candidates = null;
+        if (typeof domChange == "undefined") {
+            cache = {};
         }
-        
-        function simpleLookup(selector) {
-            selector.indexOf("\\") > 0 && (selector = selector.replace(backslash, ""));
-            switch (selector.charAt(0)) {
-                case "#":
-                    candidates = (candidates = document.getElementById(selector.substring(1))) ? [candidates] : [];
-                    break;
-                case ".":
-                    document.getElementsByClassName && (candidates = toArray(document.getElementsByClassName(selector.substring(1))));
-                    break;
-                default:
-                    candidates = toArray(document.getElementsByTagName(selector));
-            }
-            return !!candidates;
-        }
-                
-        var tag, id, c, combinator, groups, i, j, l, n, fn, match,
-        backslash = /\\/g,
-        qsa = !!document.querySelectorAll,
+        var tag, id, c, combinator, l, fn,
         count = 0,
         savedStamp = stamper++,
         saved = [],
-        /*
-         * Regexp below is used to check for selectors which are or start with a
-         * simple section. For example:
-         * "#id tag:other[complicated(stuff)]"
-         * 
-         * In the above example, the querying process would be sped up because
-         * we will find "#id" then move to the rest
-         */
-        simple = /^ *([#.]?(?:\w|\\[:.])*) *([~>+ ].+|$)/;
-        
-        if (!candidates) {
-            if ((match = selector.match(simple))
-                && !match[2]
-                && simpleLookup(match[1])) {
-                return candidates;
-            } else if (qsa) {
-                try {
-                    return toArray(document.querySelectorAll(selector)); //try to qsa the entire selector
-                } catch(e) {}                
-            } else if (match
-                && simpleLookup(match[1])) {
-                selector = match[2];
-            }
-        } else if (candidates.nodeType == 1) {
-            candidates = [candidates];
-        }
-
-        qsa = qsa && selector.indexOf(",") > 0;
-        //TODO: tweak regexp below so it doesn't capture commas in parenthesis or brackets
-        groups = selector.split(/ *, */g); //split the selector at every comma
-        for (i = -1, l = groups.length; ++i < l;) {
-            if (!candidates) {
-                if ((match = groups[i].match(simple))
-                    && !match[2]
-                    && simpleLookup(match[1])) {
-                    candidatesToSaved();
-                    continue;
-                } else if (qsa) {
-                    try {
-                        candidates = toArray(document.querySelectorAll(groups[i])); //try to qsa this selector section
-                        candidatesToSaved();
-                        continue;
-                    } catch(e) {}                
-                } else if (match
-                    && simpleLookup(match[1])) {
-                    groups[i] = match[2];
+        chunk = "",
+        whole = "",
+        candidatesToSaved = function () {
+            for (var l = candidates.length, i = -1; ++i < l;) {
+                if (candidates[i].$saved != savedStamp) {
+                    candidates[i].$saved = savedStamp;
+                    saved[count++] = candidates[i];
                 }
             }
-            !candidates && (candidates = [document]);
-            groups[i].replace(complex, function (m, $1, $2, $3, $4, $5, $6, $7) {
-                var nfn;
-                /*
+            candidates = null;
+            if (!cache[whole] || !cache[whole].norepeat) {
+                cache[whole] = saved.concat();
+                cache[whole].norepeat = 1;
+            }
+        };
+        if (candidates && !candidates.length) {
+            candidates = [candidates];
+        } else if (cache[selector]) {
+            if (typeof cache[selector] == "string") {
+                throw cache[selector];
+            }
+            if (cache[selector].norepeat) {
+                return cache[selector];
+            }
+            candidates = cache[selector];
+            candidatesToSaved();
+            return saved;
+        } else if (!candidates && qsa && /[ +~>,:\[]/.test(selector)) {
+            try {
+                cache[selector] = toArray(document.querySelectorAll(selector));
+                cache[selector].norepeat = 1;
+                return cache[selector];
+            } catch (e) {}
+        }
+        selector.replace(/(?:([#.:])?((?:[\w-*]|\\[:.])+)(?:\( *['"]?([^)]+?)['"]? *\))?)|(?:\[(?:(\w+?))(?: ?([~!\^$*|]?=) *['"]?([^\]]+?)['"]?)? *?\])|(?: *([~>+ ]) *)|(?:,|$)/g, function (m, $1, $2, $3, $4, $5, $6, $7) {
+            var nfn,
+            end = !($1 || $2 || $3 || $4 || $5 || $6 || $7);
+            /*
                  * The regexp captures as follows:
                  * 
                  * $1 - beginning special characters (".", "#", ":")
@@ -110,27 +71,32 @@ var engine;
                  * $6 - attribute value
                  * $7 - combinators (" ", "+", "~", ">")
                  */
-                if ($2) {
-                    $2.indexOf("\\") > 0 && ($2 = $2.replace(backslash, ""));  
-                    switch ($1) {
-                        case "#":
-                            id = $2;
-                            break;
-                        case ".":
-                            c = c ? c.concat(" ", $2) : $2;
-                            break;
-                        case ":":
-                            if (pseudo[$2]) {
-                                nfn = $3 ? pseudo[$2]($2, $3) : pseudo[$2];
-                            } else {
-                                throw "Unknown pseudo selector: " + $2;
-                            }                            
-                            break;
-                        default:
+            if ($2) {
+                if ($2.indexOf("\\") > 0) {
+                    $2 = $2.replace(/\\/g, "");
+                }
+                switch ($1) {
+                    case "#":
+                        id = $2;
+                        break;
+                    case ".":
+                        c = c ? c.concat(" ", $2) : $2;
+                        break;
+                    case ":":
+                        if (pseudo[$2]) {
+                            nfn = $3 ? pseudo[$2]($3, $2) : pseudo[$2];
+                        } else {
+                            cache[selector] = "Unknown pseudo selector: " + $2;
+                            throw cache[selector];
+                        }
+                        break;
+                    default:
+                        if ($2 != "*") {
                             tag = $2;
-                    }
-                } else if ($4) {
-                    /*
+                        }
+                }
+            } else if ($4) {
+                /*
                      * This is where CSS <= 3 attribute selectors are weeded through
                      * attr represents the attribute; matchType is the type of match it
                      * will look for in the attribute's value (value).
@@ -140,100 +106,111 @@ var engine;
                      * matchType - "="
                      * value - "something"
                      */
-                    (function (attr, matchType, value) {
-                        nfn = function (c) {
-                            var a = attr.toLowerCase() == "class" ? c.className : c.getAttribute(attr);
-                            switch (matchType) {
-                                case "~=":
-                                    return a && (a == value || a.indexOf(value + " ") == 0 || a.indexOf(" " + value + " ") > 0 || (a.indexOf(" " + value) > 0 && a.indexOf(" " + value) == a.length - value.length - 1));
-                                case "^=":
-                                    return a && a.indexOf(value) == 0;
-                                case "!=":
-                                    return !a || a != value;
-                                case "$=":
-                                    return a && a.indexOf(value, a.length - value.length) > -1;
-                                case "*=":
-                                    return a && a.indexOf(value) > -1;
-                                case "|=":
-                                    return a && (a == value || a.substr(0, value.length + 1) == value + "-");
-                                case "=":
-                                    return a == value;
-                                default:
-                                    return a;
-                            }
-                        };
-                    }($4, $5, $6));
-                }
-                if (nfn) {
-                    (function (oldFn, newFn) {
-                        fn = oldFn ?
-                        function (c) {
-                            if (oldFn(c)) {
-                                return newFn(c);
-                            }
-                            return false;
+                (function (attr, matchType, value) {
+                    nfn = function (c) {
+                        var a = attr.toLowerCase() == "class" ? c.className : c.getAttribute(attr);
+                        switch (matchType) {
+                            case "~=":
+                                return a && (a == value || a.indexOf(value + " ") == 0 || a.indexOf(" " + value + " ") > 0 || (a.indexOf(" " + value) > 0 && a.indexOf(" " + value) == a.length - value.length - 1));
+                            case "^=":
+                                return a && a.indexOf(value) == 0;
+                            case "!=":
+                                return !a || a != value;
+                            case "$=":
+                                return a && a.indexOf(value, a.length - value.length) > -1;
+                            case "*=":
+                                return a && a.indexOf(value) > -1;
+                            case "|=":
+                                return a && (a == value || a.substr(0, value.length + 1) == value + "-");
+                            case "=":
+                                return a == value;
+                            default:
+                                return a;
                         }
-                        :
-                        function (c) {
+                    };
+                }($4, $5, $6));
+            }
+            if (nfn) {
+                (function (oldFn, newFn) {
+                    fn = oldFn ?
+                    function (c) {
+                        if (oldFn(c)) {
                             return newFn(c);
-                        };
-                    }(fn, nfn))
-                    nfn = undefined;
-                }
-                if ($7) {
-                    if (tag || id || c || fn) {
-                        candidates = getEls(tag, id, c, fn, combinator, candidates);
-                        tag = id = c = fn = undefined;
+                        }
+                        return false;
                     }
+                    :
+                    function (c) {
+                        return newFn(c);
+                    };
+                }(fn, nfn));
+                nfn = undefined;
+            }
+            if (($7 || end) && (tag || id || c || fn)) {
+                candidates = cache[chunk] || (cache[chunk] = getEls(tag, id, c, fn, combinator, candidates, chunk));
+                tag = id = c = fn = undefined;
+                if ($7) {
                     combinator = $7;
                 }
-            });
-            if (tag || id || c || fn) {
-                candidates = getEls(tag, id, c, fn, combinator, candidates);
-                candidatesToSaved();
-                tag = id = c = combinator = fn = undefined;
             }
+            if (end) {
+                whole += chunk;
+                chunk = "";
+                combinator = undefined;
+                candidatesToSaved();
+                whole += m;
+            } else {
+                chunk += m;
+            }
+            return m;
+        });
+        if (whole != selector) {
+            count = -1;
+            while (whole.charAt(++count) == selector.charAt(count)) {}
+            cache[selector] = "Invalid selector at position " + count;
+            throw cache[selector];
         }
         return saved;
-    }
-    
+    };
+
     if (document.documentElement.nextElementSibling !== undefined) {
-        function nextElSib (el) {
+        nextElSib = function (el) {
             return el.nextElementSibling;
-        }
-        function prevElSib (el) {
+        };
+        prevElSib = function (el) {
             return el.previousElementSibling;
-        }
+        };
     } else {
-        function nextElSib (node) {
+        nextElSib = function (node) {
             while ((node = node.nextSibling) && node.nodeType != 1) {}
             return node;
-        }
-        function prevElSib (node) {
+        };
+        prevElSib = function (node) {
             while ((node = node.previousSibling) && node.nodeType != 1) {}
             return node;
-        }
+        };
     }
     if (document.documentElement.lastElementChild !== undefined) {
-        function firstElChild (el) {
+        firstElChild = function (el) {
             return el.firstElementChild;
-        }
-        function lastElChild (el) {
+        };
+        lastElChild = function (el) {
             return el.lastElementChild;
-        }
+        };
     } else {
-        function firstElChild (node) {
+        firstElChild = function (node) {
             for (node = node.firstChild; node.nodeType != 1; node = node.nextSibling) {}
             return node;
-        }
-        function lastElChild (node) {
+        };
+        lastElChild = function (node) {
             for (node = node.lastChild; node.nodeType != 1; node = node.previousSibling) {}
             return node;
-        }        
+        };
     }
-    
-    function toArray(arr, arr2) { 
+
+    function toArray(arr, arr2) {
         /*
+         * toArray( {array | nodeList}, [array] )
          * Concats a nodeList and an array or two arrays, or converts a nodeList
          * to a new array. If passing in a nodeList it should always be the first
          * argument passed. If only converting a nodeList just the first
@@ -241,21 +218,46 @@ var engine;
          * When copying two arrays into one, the first array's elements are 
          * copied at the end of the second array and the second array is returned
          */
-        !arr2 && (arr2 = []);
+        if (!arr2) {
+            arr2 = [];
+        }
         for (var i = 0, l = arr.length, j = arr2.length; i < l; arr2[j++] = arr[i++]) {}
         return arr2;
     }
-        
-    function getEls (tag, id, c, fn, combinator, candidates) {
-        var current, j, k, l, nl, cReg,
+
+    function getEls(tag, id, c, fn, combinator, candidates, chunk) {
+        var current, j, k, l, nl, cReg, holder,
         i = -1,
-        count = 0,
+        count = 0;
+        if (!candidates) { //XOR, expedited lookup for simple selectors such as "div", ".class", "#id"
+            if (!!tag ^ !!id ^ !!c ^ !!fn) {
+                if (tag) {
+                    holder = toArray(document.getElementsByTagName(tag));
+                } else if (id) {
+                    holder = (holder = document.getElementById(id)) ? [holder] : [];
+                } else if (document.getElementsByClassName && c) {
+                    holder = toArray(document.getElementsByClassName(c));
+                }
+            }
+            if (!holder && qsa) {
+                try {
+                    holder = toArray(document.querySelectorAll(chunk));
+                } catch (e) {}                
+            }
+            if (holder) {
+                holder.norepeat = 1;
+                return holder;
+            }
+            candidates = [document];
+        }
+        if ((l = candidates.length) < 1) { //no matches from previous lookups (no context)
+            return candidates;
+        }
         holder = [];
         tag = tag ? tag.toUpperCase() : "*";
-        if ((l = candidates.length) < 1) { //if there were no matches on the previous selector segment lookup
-            return candidates;
-        }        
-        c && (cReg = new RegExp(c.replace(/(\S+) ?/g, "(?=$1)")));
+        if (c) {
+            cReg = new RegExp(c.replace(/(\S+) ?/g, "(?=$1)"));
+        }
         if (!combinator || combinator == " ") {
             //gets to this point on the initial lookup, or when there is a " " combinator
             if (id) { //check by id
@@ -269,8 +271,8 @@ var engine;
                             holder = [current];
                             break;
                         }
-                    }     
-                }              
+                    }
+                }
             } else if (c) { //check by class
                 if (document.getElementsByClassName) { //browsers that support getElementsByClassName
                     while (++i < l) {
@@ -338,13 +340,13 @@ var engine;
                     if (combinator == "+") {
                         break;
                     }
-                } while ((current = nextElSib(current)))
+                } while ((current = nextElSib(current)));
             }
         stamper2++;
         }
         return holder;
     }
-    
+
     /*
      * Custom pseudo selectors can be added below (or the one's below can be
      * removed if not. There are two types of pseudo selectors below, simple and
@@ -390,7 +392,7 @@ var engine;
         "last-of-type": function (c) {
             var tag = c.tagName;
             while ((c = nextElSib(c)) && c.tagName != tag) {}
-            return !c;            
+            return !c;
         },
         "only-of-type": function (c) {
             var tag = c.tagName,
@@ -399,12 +401,12 @@ var engine;
             if (!c) {
                 c = current;
                 while ((c = nextElSib(c)) && c.tagName != tag) {}
-                return !c
+                return !c;
             }
-            return false;            
+            return false;
         },
-        // Advanced pseudo selectors which take two parameters (the pseudo selector name, and the string within the parenthesis) and returns a function which takes one parameter
-        not: function (p, paren) {
+        // Advanced pseudo selectors which take two parameters (the string within the parenthesis, and the pseudo selector name,) and returns a function which takes one parameter
+        not: function (paren) {
             var fn;
             (function (a) {
                 fn = function (c) {
@@ -416,21 +418,21 @@ var engine;
                     }
                     return true;
                 };
-            }(engine(paren)))
+            }(engine(paren)));
             return fn;
         },
-        contains: function (p, paren) {
+        contains: function (paren) {
             var fn;
             (function (p) {
                 fn =  function (c) {
                     return (c.textContent || c.innerText || "").indexOf(p) > -1;
                 };
-            }(paren))
+            }(paren));
             return fn;
         },
-        "nth-child": function (p, paren) {
+        "nth-child": function (paren, p) {
             var fn,
-            match = paren.match(/^ ?(?:([+-]?\d*)?(n) ?(?=[+-]|$))?([+-]? ?\d+|odd|even)?$/);
+            match = paren.match(/^ ?(?:([+\-]?\d*)?(n) ?(?=[+\-]|$))?([+\-]? ?\d+|odd|even)?$/);
             /*
                  * In the case of "-3n + 6"
                  * m[1] = "-3"
@@ -439,7 +441,7 @@ var engine;
                  */
             if (!match) { //if the regexp above could not find a match
                 return function () {
-                    return false
+                    return false;
                 };
             } else if (match[3] == "even") {
                 match[3] = 2;
@@ -449,7 +451,7 @@ var engine;
                 match[1] = 2;
             } else if (!(match[1] -= 0) && !(match[3] -= 0)) { //"n"
                 return function () {
-                    return true
+                    return true;
                 };
             } else if (!match[3]) { //"3n"
                 match[3] = match[1];
@@ -471,12 +473,12 @@ var engine;
                             child = firstElChild(parent);
                             do {
                                 child.$n = ++count;
-                            } while ((child = nextElSib(child)))
+                            } while ((child = nextElSib(child)));
                         } else if (p == "nth-last-child") {
                             child = lastElChild(parent);
                             do {
                                 child.$nl = ++count;
-                            } while ((child = prevElSib(child)))
+                            } while ((child = prevElSib(child)));
                         } else if (p == "nth-of-type") {
                             child = firstElChild(parent);
                             do {
@@ -484,7 +486,7 @@ var engine;
                                     types[tag] = count;
                                 }
                                 child.$nt = ++types[tag];
-                            } while ((child = nextElSib(child)))
+                            } while ((child = nextElSib(child)));
                         } else {
                             child = lastElChild(parent);
                             do {
@@ -493,7 +495,7 @@ var engine;
                                     types[tag] = count;
                                 }
                                 child.$nlt = ++types[tag];
-                            } while ((child = prevElSib(child)))
+                            } while ((child = prevElSib(child)));
                         }
                     }
                     switch (p) {
@@ -510,13 +512,12 @@ var engine;
                             n = c.$nlt;
                     }
                     return m[1] == 0 ? n == 0 : n % m[1] == 0 && n / m[1] >= 0;
-                }
-            }(p, match))
+                };
+            }(p, match));
             return fn;
         }
     };
     pseudo["nth-last-child"] = pseudo["nth-of-type"] = pseudo["nth-last-of-type"] = pseudo["nth-child"];
-    
     /*
      * Everything below is for caching and the below code is the only difference
      * between engine.js and engineWithCache.js. The preceding code can be safely
@@ -524,49 +525,13 @@ var engine;
      * 
      * The code below could easily be modified to work with most selector engines
      */
-    (function(fn) {
-    engine = function (selector, candidates) {
-        if (candidates) {
-            return fn(selector, candidates);
-        }
-        if (cache[selector]) {
-            return cache[selector];
-        }
-        var holder = [],
-        piece = "",
-        chunk = "",
-        whole = "";
-
-        selector.replace(complex, function(m) {
-            var combo = arguments[7];
-            if(!combo) {
-                piece += m;
-                chunk += m;
-            } else if (combo == ",") {
-                candidates = cache[chunk] || (cache[chunk] = fn(piece, candidates));
-                holder = cache[whole] || (cache[whole] = holder.concat(candidates));
-                candidates = null;
-                chunk = piece = "";
-            } else {
-                candidates = cache[chunk] || (cache[chunk] = fn(piece, candidates));
-                cache[whole] || (cache[whole] = holder.concat(candidates));
-                chunk += (piece = m);
-            }
-            whole += m;
-        });
-        cache[chunk] || (cache[chunk] = fn(piece, candidates));
-        return chunk[whole] || (cache[whole] = holder.concat(cache[chunk]));
-    }
-    }(engine))
-    
     function domChange () {
         cache = {}; //clear the cache
     }
-
- //DOM Change detection
+    //DOM Change detection
     if (document.addEventListener) {
-    document.addEventListener("DOMNodeInserted", domChange, true);
-    document.addEventListener("DOMNodeRemoved", domChange, true);
+        document.addEventListener("DOMNodeInserted", domChange, true);
+        document.addEventListener("DOMNodeRemoved", domChange, true);
     } else { //IE < 9
         /*
          * This emulates the DOM Mutation events by intercepting the DOM
@@ -577,7 +542,7 @@ var engine;
          * This method assumes DOM manipulation methods are not called until
          * after the DOM is loaded
          */
-        function IEInitEl (el) {
+        var IEInitEl = function (el) {
             var l = 6,
             intercepts = ["appendChild", "removeChild", "replaceChild", "insertBefore", "insertCell", "insertRow"];
             while (l--) {
@@ -590,7 +555,7 @@ var engine;
                             } catch (e) { //IE 6 & 7
                                 fn(arguments[0], arguments[1]);
                             }
-                        }
+                        };
                     }(el[intercepts[l]]));
                 }
             }
@@ -611,7 +576,7 @@ var engine;
                     });
                 }(Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML").set));
             }
-        }
+        };
         if (window.Element) { //IE8
             IEInitEl(Element.prototype);
         } else { //IE 6 & 7
@@ -621,7 +586,7 @@ var engine;
              *  "* { zoom: expression(IEInitEl(this))}"
              *
              *  This selects every element and runs the IEInitEl function in the
-             *  context of every element. Within the IEInitEl function there is
+             *  context of each element. Within the IEInitEl function there is
              *  code that removes the expression from the element to ensure the
              *  expression is only run once per element.
              *
@@ -651,7 +616,7 @@ var engine;
                                 fn(arguments[i++]);
                             }
                         }
-                    }
+                    };
                 }(document[intercepts[l]]));
             }
         }(["write", "writeln"], 2));
