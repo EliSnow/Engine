@@ -1,4 +1,0 @@
-Engine is a new Javascript CSS3 selector engine. To call simply use the engine
-function, passing in your selector as a parameter. For example:
-
-engine("div > span:first-child")
