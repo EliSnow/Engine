@@ -14,7 +14,7 @@
 * 	[:{0} (ad-hoc pseudo)](selectors.md#ad-hoc)
 * 	[[attribute]/[.property]](selectors.md#attr-prop)
 
-##API
+##[API](api.md)
 
 * 	[engine(selector \[, context \[, references \] \])](api.md#engine)
 * 	[engine.addFilter(pseudo, fn), engine.addTransformer(pseudo, fn)](api.md#add-filter)
