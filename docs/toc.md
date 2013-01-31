@@ -16,8 +16,8 @@
 
 ##API
 
-* 	[engine(selector \[, context \[, references \] \])](#engine)
-* 	[engine.addFilter(pseudo, fn), engine.addTransformer(pseudo, fn)](#add-filter)
-* 	[engine.anb(str)](#anb)
-* 	[engine.getSelector(el)](#get-selector)
-* 	[engine.translate(selector \[, context \[, references \] \])](#translate)
+* 	[engine(selector \[, context \[, references \] \])](api.md#engine)
+* 	[engine.addFilter(pseudo, fn), engine.addTransformer(pseudo, fn)](api.md#add-filter)
+* 	[engine.anb(str)](api.md#anb)
+* 	[engine.getSelector(el)](api.md#get-selector)
+* 	[engine.translate(selector \[, context \[, references \] \])](api.md#translate)
