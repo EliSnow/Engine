@@ -1,5 +1,7 @@
 /*jshint strict:true, eqeqeq:false, eqnull:true, smarttabs:true, regexdash: true, immed:true, forin:true, noarg:true, nonew:true, laxbreak:true, undef:true, unused:true, curly:true, latedef:true, newcap:true, browser:true, maxerr:50, quotmark:true */
+/*ie8_start*/
 /*global Element:true */
+/*ie8_end*/
 var engine = (function () {
 	"use strict";
 	function regCombineOr () {
@@ -139,8 +141,8 @@ var engine = (function () {
 			/*local-link_end*/
 			/*not_start*/
 			NOT : function (args, attr, attrValue, p, context, references) {
-				/*ie8_start*/
 				args = filter(engine(args, context, references), attr, attrValue, filters.tru);
+				/*ie8_start*/
 				if (!pseudoNotSupport) {
 					return translate("[" + attr + "!='" + attrValue + "']", references);
 				}

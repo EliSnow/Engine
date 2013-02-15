@@ -1,5 +1,5 @@
 module.exports = function(grunt) {
-	var src = "engine.js";
+
 	// Project configuration.
 	grunt.initConfig({
 		concat : {
@@ -36,9 +36,9 @@ module.exports = function(grunt) {
 	grunt.registerTask("exclude", function () {
 		grunt.task.run("lint:afterExclude");
 		this.requires("concat");
-		this.requiresConfig("concat.dist.dest");
+		this.requiresConfig("concat.js.dest");
 		var l,
-			src = grunt.file.read(grunt.config("concat").dist.dest);
+			src = grunt.file.read(grunt.config("concat").js.dest);
 		[].slice.call(arguments).forEach(function(section) {
 			l = src.length;
 			src = grunt.helper("removeSection", src, section + "_start", section + "_end", true);
@@ -46,7 +46,7 @@ module.exports = function(grunt) {
 				grunt.log.writeln(("Could not find section \"" + section + "\"").yellow);
 			}
 		});
-		grunt.file.write(grunt.config("concat").dist.dest, src);
+		grunt.file.write(grunt.config("concat").js.dest, src);
 	});
 	
 };
